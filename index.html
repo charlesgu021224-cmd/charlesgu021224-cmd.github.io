@@ -261,17 +261,161 @@ head(as.data.frame(ego))</code></pre>
         <a class="btn secondary" href="#">Download Script</a>
       </div>
     </section>
+  
+
+  <section class="code-card">
+  <h2>肿瘤计算</h2>
+  <p><strong>Introduction:</strong> 计算患者免疫评分和肿瘤纯度，分为基质组分，免疫组分，肿瘤组分，肿瘤纯度</p>
+  <div class="code-meta">
+    <span class="tag">R</span>
+    <span class="tag">DESeq2</span>
+    <span class="tag">RNA-seq</span>
+  </div>
+  <pre><code>library(utils)
+  rforge <- "https://R-Forge.R-project.org"
+install.packages("estimate",
+                 repos = paste0(rforge, "/src/contrib"),
+                 dependencies = TRUE)
+    exp <- read.table("tpms01A_log2.txt",sep = "\t",row.names = 1,check.names = F,stringsAsFactors = F,header= T)
+tmp <- read.table("tpms01A_log2.txt", sep="\t", header=TRUE, check.names=FALSE)
+head(tmp[,1])
+  filterCommonGenes(input.f = "tpms01A_log2.txt",
+                  output.f = "tpms01A_log2.gct",
+                  id = "GeneSymbol") #进行相同基因的检索和匹配
+estimateScore("tpms01A_log2.gct",
+              "tpms01A_log2_estimate_score.txt",
+              platform = "affymetrix")
+  ESTIMATE_result <- read.table("tpms01A_log2_estimate_score.txt",
+                              sep = "\t", header = TRUE,
+                              row.names = 1, check.names = FALSE)
+    head(ESTIMATE_result)
+#因与行名重复，去除列表中第一列
+ESTIMATE_result <- ESTIMATE_result[,-1]
+#将第一行样本名称变成列名，将其赋值给colnames (ESTIMATE_result)
+colnames (ESTIMATE_result) <- ESTIMATE_result[1,]
+#ESTIMATE_result[-1,]：删除第 1 行（因为它已经被用作列名了，避免重复）。t(...)：转置（行列互换）。
+ESTIMATE_result <- as.data.frame(t(ESTIMATE_result[-1,]))
+#强制把 ESTIMATE_result 的行名设置为 exp 的列名（样本 barcode）。目的：让 ESTIMATE 的结果与表达矩阵 exp 的样本顺序/命名一致，方便后续对齐、合并、画图。
+rownames (ESTIMATE_result) <-  colnames (exp)
+  write.table(ESTIMATE_result,file = "ESTIMATE_result.txt",sep="\t",row.names = T,col.names = NA,quote = F)
+  </code></pre>
+  <a href="你的GitHub链接">View Repository</a>
+</section>
+
+  <section class="code-card">
+  <h2>RNA-seq Differential Expression</h2>
+  <p><strong>Introduction:</strong> This script performs differential expression analysis using DESeq2.</p>
+  <div class="code-meta">
+    <span class="tag">R</span>
+    <span class="tag">DESeq2</span>
+    <span class="tag">RNA-seq</span>
+  </div>
+  <pre><code>这里放代码</code></pre>
+  <a href="https://github.com/charlesgu021224-cmd">View Repository</a>
+</section>
+
+  <section class="code-card">
+  <h2>单基因不同时期表达</h2>
+  <p><strong>Introduction:</strong> 不同时期BTK表达</p>
+  <div class="code-meta">
+    <span class="tag">R</span>
+    <span class="tag">DESeq2</span>
+    <span class="tag">RNA-seq</span>
+  </div>
+  <pre><code>library(tidyverse)
+library(readr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+clinical.expr01A = read.table("clinical.expr01A.txt",sep = "\t",row.names = 1,check.names = F,stringsAsFactors = F,header= T)
+gene <- "CLEC5A"
+clinical_CLEC5A <- cbind(clinical.expr01A[,1:6],clinical.expr01A[,gene])
+write.csv(clinical_GABRG2, file = "clinical_CLEC5A.csv")
+
+clin <- clinical_CLEC5A
+names(clin)
+colnames(clin)[7] <- "CLEC5A"
+# 1) 样本ID列：默认取第1列（最常见）
+sample_col <- names(clin)[1]
+
+# 2) stage列：在列名里找包含 "stage" 的
+stage_hits <- names(clin)[grepl("stage", tolower(names(clin)))]
+if (length(stage_hits) == 0) stop("找不到 stage 列：请检查 names(clin) 里哪列是 stage。")
+stage_col <- stage_hits[1]
+
+# 3) 表达列：优先找包含 "expr" 或 "clinical" 或 "BTK" 的，否则就取除去 sample/stage 后的第1个数值列
+expr_hits <- names(clin)[grepl("expr|clinical|btk", tolower(names(clin)))]
+expr_col <- expr_hits[1]
+
+if (is.na(expr_col) || length(expr_hits) == 0) {
+  # 兜底：找一个数值列当表达列
+  num_cols <- names(clin)[sapply(clin, is.numeric)]
+  num_cols <- setdiff(num_cols, c(sample_col))  # 样本列通常不是数值
+  if (length(num_cols) == 0) stop("找不到数值表达列：请检查文件里哪一列是基因表达。")
+  expr_col <- num_cols[1]
+}
+    df_plot <- clin %>%
+  transmute(
+    sample    = as.character(.data[[sample_col]]),
+    stage_raw = as.character(.data[[stage_col]]),
+    expr      = .data[[expr_col]]
+  ) %>%
+  filter(!is.na(stage_raw), !is.na(expr)) %>%
+  mutate(
+    stage = stage_raw %>%
+      str_to_upper() %>%
+      str_replace_all("^STAGE\\s*", "") %>%  # "Stage II" -> "II"
+      str_replace_all("\\s+", "")
+  )
+      # 看看每组样本数（必须至少2组）
+print(table(df_plot$stage))
+
+# stage 排序（论文更规范）
+stage_levels <- c("I","IA","IB","II","IIA","IIB","III","IIIA","IIIB","IIIC","IV","IVA","IVB","IVC")
+present <- unique(df_plot$stage)
+levels_use <- c(stage_levels[stage_levels %in% present], setdiff(present, stage_levels))
+df_plot$stage <- factor(df_plot$stage, levels = levels_use)
+
+# 统计检验：>=3组用Kruskal；2组用Wilcoxon
+k <- nlevels(droplevels(df_plot$stage))
+if (k >= 3) {
+  test <- kruskal.test(expr ~ stage, data = df_plot)
+  subtxt <- ifelse(test$p.value < 0.001, "Kruskal–Wallis p < 0.001",
+                   paste0("Kruskal–Wallis p = ", signif(test$p.value, 3)))
+} else if (k == 2) {
+  test <- wilcox.test(expr ~ stage, data = df_plot, exact = FALSE)
+  subtxt <- ifelse(test$p.value < 0.001, "Wilcoxon p < 0.001",
+                   paste0("Wilcoxon p = ", signif(test$p.value, 3)))
+} else {
+  stop("stage 只有一个组：请检查 stage 列内容或清洗规则。")
+}
+
+# 学术箱线图（箱线 + 抖动点）
+ggplot(df_plot, aes(x = stage, y = expr)) +
+  geom_boxplot(width = 0.55, outlier.shape = NA, linewidth = 0.7) +
+  geom_jitter(width = 0.15, alpha = 0.35, size = 1.6) +
+  labs(
+    title = "Gene expression across AJCC stages",
+    subtitle = subtxt,
+    x = "Stage",
+    y = "Expression"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold"))
+       </code></pre>
+  <a href="https://github.com/charlesgu021224-cmd">View Repository</a>
+</section>
 
     <section id="contact" class="contact">
       <h2 class="section-title">Contact</h2>
       <p>
-        Email: yourname@email.com
+        Email: charlesgu021224@gmail.com
       </p>
       <p>
-        GitHub: github.com/yourusername
+        GitHub: github.com/charlesgu021224-cmd
       </p>
       <p>
-        You can also add your LinkedIn, Google Scholar, or lab website here.
+        https://www.bilibili.com/video/BV1nc411g7G3/?spm_id_from=333.337.search-card.all.click
       </p>
     </section>
   </main>
